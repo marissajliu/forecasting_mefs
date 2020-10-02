@@ -1,0 +1,5 @@
+data/generation/*.csv
+data/weather_formatting/formatted/*
+neural_net_model/*.csv
+simple_dispatch_model/raw_data/*
+
