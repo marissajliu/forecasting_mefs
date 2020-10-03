@@ -8,3 +8,4 @@ simple_dispatch_model/pjm/*
 simple_dispatch_model/simulated/*
 simple_dispatch_model/*.csv
 simple_dispatch_model/pjm/*.csv
+.DS_Store
