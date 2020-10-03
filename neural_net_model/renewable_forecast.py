@@ -1,8 +1,8 @@
-# import model_classes, nets
+import model_classes, nets
 
-# import torch
-# from torch.autograd import Variable, Function
-# import torch.cuda
+import torch
+from torch.autograd import Variable, Function
+import torch.cuda
 
 import os
 import pandas as pd
@@ -11,18 +11,18 @@ from sklearn.preprocessing import StandardScaler
 
 from datetime import datetime as dt
 
-
 # Note: this assumes you're running it in the parent directory 
 WEATHER_TRAIN = os.path.join('data', 'weather_formatting', 'formatted', 'weather_train_after_pca.csv')
 WEATHER_TEST = os.path.join('data', 'weather_formatting', 'formatted', 'weather_test_after_pca.csv')
-GENERATION_DATA = os.path.join(os.path.dirname(os.getcwd()), 'data', 'generation', 'generation_data.csv')
+GENERATION_DATA = os.path.join('data', 'generation', 'generation_data.csv')
 RENEWABLE_GEN = 'renewable_gen'
-NUCLEAR_COL_NAME = 'nuclear_gen'
+NUCLEAR_COL_NAME = 'nuclear_gen_prev_week'
 LOAD_FORECAST_COL_NAME = 'pjm_load_forecast'
+FORECASTED_FOSSIL_COL_NAME = 'fossil_gen'
 
 INDEX = ['year', 'month', 'day']
 DATE_COL = 'date'
-ACTUAL_FOSSIL_GEN = os.path.join(os.path.dirname(os.getcwd()), 'data', 'generation', 'fossil_gen_simple_dispatch.csv')
+ACTUAL_FOSSIL_GEN_2017 = os.path.join(os.path.dirname(os.getcwd()), 'data', 'generation', 'actual_fossil_gen_2017.csv')
 FOSSIL_FORECAST_COL = ['date', 'forecasted fossil demand']
 
 def main():
@@ -50,36 +50,44 @@ def main():
 
 	pred_values = pred_test.cpu().detach().numpy()
 	pred_values = pd.DataFrame(pred_values, index = test_dates)
-	pred_values.to_csv('renewable_forecast.csv')
+	datetime_fossil_demand(pred_values)
 
 
 def datetime_fossil_demand(df):
 	df, dates = merge_datetime_col(df, RENEWABLE_GEN)
-	print(df)
 
 	nuclear_df = get_nuclear(dates)
 	df = df.reset_index().merge(nuclear_df, how='inner', on=DATE_COL)
 
 	load_forecasts_df = get_load_forecasts()
 	df = df.merge(load_forecasts_df, how='inner', on=DATE_COL)
+
+	df[FORECASTED_FOSSIL_COL_NAME] = df[LOAD_FORECAST_COL_NAME] - df[RENEWABLE_GEN] - df[NUCLEAR_COL_NAME]
+	forecasted_fossil_df = df[[DATE_COL, FORECASTED_FOSSIL_COL_NAME]]
+
 	# merge with actual demand before sept 
-	# actual_fossil_gen = pd.read_csv(ACTUAL_FOSSIL_GEN, parse_dates = ['date'])
-	# actual_fossil_gen = actual_fossil_gen[actual_fossil_gen['date'].dt.year == 2017]
-	# actual_fossil_gen.set_index('date', inplace=True)
+	actual_fossil_gen = pd.read_csv(ACTUAL_FOSSIL_GEN_2017, parse_dates = ['date'])
+	
+	forecasted_fossil_df.set_index(DATE_COL, inplace=True)
+	actual_fossil_gen.set_index(DATE_COL, inplace=True)
 
-	# df = df.combine_first(actual_fossil_gen)
-	df.to_csv('forecasted_demand.csv')
-	return df
+	forecasted_fossil_df = forecasted_fossil_df.combine_first(actual_fossil_gen)
+	forecasted_fossil_df.to_csv('forecasted_fossil_gen.csv')
+
+	return forecasted_fossil_df
 
 
-def get_nuclear():
+
+def get_nuclear(dates):
 	df = pd.read_csv(GENERATION_DATA, index_col = INDEX)
 
 	filter_col = [col for col in df if col.startswith(NUCLEAR_COL_NAME)]
 	df = df[filter_col]
 
-	# df = df.reset_index().merge(dates, how='inner', on=['year', 'month', 'day'])
-	# print(df)
+	df = df.reset_index().merge(dates,  on=['year', 'month', 'day'])
+
+	df[DATE_COL] = pd.to_datetime(df.year * 1000 + df.day, format='%Y%j') + pd.to_timedelta(df.hour, unit='h')
+	df = df.drop(['year', 'month', 'day', 'hour'], axis = 1)
 
 	return df
 
@@ -89,13 +97,14 @@ def get_load_forecasts():
 
 	filter_col = [col for col in df if col.startswith(LOAD_FORECAST_COL_NAME)]
 	df = df[filter_col]
-	df, dates = merge_datetime_col(df.reset_index(), LOAD_FORECAST_COL_NAME)
-	print(df)
+	df, dates = merge_datetime_col(df, LOAD_FORECAST_COL_NAME)
 
 	return df
 
 
 def merge_datetime_col(df, col_name):
+	df.reset_index(inplace=True)
+
 	df = pd.melt(df, id_vars=['year', 'month', 'day'], var_name='hour', value_name=col_name)
 
 	if col_name != RENEWABLE_GEN: 
@@ -165,10 +174,6 @@ def standardize_data(X_train, X_test):
 	return X_train, X_test
 
 
-df = pd.read_csv('renewable_forecast.csv')
-df, dates = datetime_fossil_demand(df)
-get_nuclear(dates)
-
-# get_load_forecasts()
-# if __name__=='__main__':
-#     main()
+if __name__=='__main__':
+    main()
+    

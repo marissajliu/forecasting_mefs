@@ -20,6 +20,7 @@ WEEKLY_GROUPING = ['year', 'week']
 DAILY_GROUPING = ['year', 'month', 'week', 'day']
 
 NUCLEAR_COL_NAME = 'nuclear_gen'
+NUCLEAR_LAST_WEEK = 'nuclear_gen_prev_week'
 
 FOSSIL_FUEL = ['Coal', 'Gas', 'Multiple Fuels', 'Oil']
 FOSSIL_COL_NAME = 'fossil_gen'
@@ -36,7 +37,13 @@ def main():
 	formatted_load_forecast = get_load_forecasts(load_forecast_df)
 
 	fossil_gen_simple_dispatch = fossil_gen_for_simple_dispatch(gen_by_fuel_type_df)
-	fossil_gen_simple_dispatch.set_index('date').sort_index().to_csv('fossil_gen_simple_dispatch.csv')
+
+	actual_fossil_gen_2017 = fossil_gen_simple_dispatch[fossil_gen_simple_dispatch['date'].dt.year == 2017]
+	actual_fossil_gen_2017.set_index('date').sort_index().to_csv('actual_fossil_gen_2017.csv')
+
+	actual_fossil_gen_2017 = fossil_gen_simple_dispatch[fossil_gen_simple_dispatch['date'].dt.year == 2016]
+	actual_fossil_gen_2017.set_index('date').sort_index().to_csv('actual_fossil_gen_2016.csv')
+
 	formatted_fossil_gen = fossil_gen_by_hour(fossil_gen_simple_dispatch)
 
 	formatted_renewables = get_wind_solar_hydro(gen_by_fuel_type_df)
@@ -52,12 +59,14 @@ def main():
 	
 	df_merged.to_csv('generation_data.csv')
 
+
 def fossil_gen_by_hour(df):
 	df = _extract_date(df, DATE_COL)
 
 	df = df[['year', 'month', 'week','day', 'hour', 'fossil_gen']]
 	df = _pivot_hourly(df, DAILY_GROUPING).dropna()
 	return df 
+
 
 def get_load_forecasts(df):
 	df = df.copy(deep=True)
@@ -93,6 +102,9 @@ def get_nuclear_gen(df):
 	nuclear_weekly = nuclear.groupby(WEEKLY_GROUPING).mean().reset_index()
 	nuclear_weekly = nuclear_weekly[['year', 'week', 'nuclear_gen']]
 	nuclear_weekly.set_index(['year', 'week'], inplace=True)
+
+	nuclear_weekly[NUCLEAR_LAST_WEEK] = nuclear_weekly[NUCLEAR_COL_NAME].shift(1)
+	nuclear_weekly.dropna(inplace=True)
 
 	return nuclear_weekly
 

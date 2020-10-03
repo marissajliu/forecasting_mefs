@@ -792,13 +792,21 @@ class plotDispatchMultiple(object):
             matplotlib.pylab.tight_layout()
             return f
 
-simulated_dispatch_save_folder = '/home/amy/simple_dispatch/simulated/'
-nerc_region = 'PJM'
-run_year = 2016
+simulated_dispatch_save_folder = 'simulated/'
 
-dispatch_df = pandas.read_csv(simulated_dispatch_save_folder + 'dispatch_output_weekly_%s_%s_with_52.csv'%(nerc_region, str(run_year)))
+run_year = 2017
+run_type = 'forecast' # actual or forecast 
+nerc_region = 'PJM'
+if run_year == 2016:
+    pjm_dispatch_save_folder = 'baseline/2016/'
+elif run_year == 2017: 
+    if run_type == 'actual':
+        pjm_dispatch_save_folder = 'baseline/2017/'
+    else:
+        pjm_dispatch_save_folder = 'forecasted/2017/'  
+
+dispatch_df = pandas.read_csv(simulated_dispatch_save_folder + 'dispatch_output_weekly_%s_%s_%s_with_52.csv'%(nerc_region, str(run_year), run_type))
 
 genMEFs = generateMefs(dispatch_df)
-genMEFs.df
-genMEFs.df.to_csv(simulated_dispatch_save_folder + 'final_mefs_%s_%s.csv'%(nerc_region, str(run_year)), index=False)
+genMEFs.df.to_csv(simulated_dispatch_save_folder + 'final_mefs_%s_%s_%s.csv'%(nerc_region, str(run_year), run_type), index=False)
 

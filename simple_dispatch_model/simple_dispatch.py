@@ -121,7 +121,7 @@ class bidStack(object):
         gen_cost ($/MWh) = (heat_rate * "fuel"_price) + (co2 * co2_price) + (so2 * so2_price) + (nox * nox_price) + vom
         """
         df = self.df_0.copy(deep=True)
-        df.to_csv("calc_gen_cost.csv")
+
         #pre-processing:
             #adjust coal fuel prices by the "coal_dol_per_mmbtu" input
         df.loc[df.fuel_type=='coal', 'fuel_price' + str(self.time)] = scipy.maximum(0, df.loc[df.fuel_type=='coal', 'fuel_price' + str(self.time)] + self.coal_dol_per_mmbtu)
@@ -641,9 +641,17 @@ class dispatch(object):
 
 
 if __name__ == '__main__':
-    run_year = 2016
+    run_year = 2017
+    run_type = 'forecast' # actual or forecast 
     nerc_region = 'PJM'
-    pjm_dispatch_save_folder = 'pjm/'
+    if run_year == 2016:
+        pjm_dispatch_save_folder = 'baseline/2016/'
+    elif run_year == 2017: 
+        if run_type == 'actual':
+            pjm_dispatch_save_folder = 'baseline/2017/'
+        else:
+            pjm_dispatch_save_folder = 'forecasted/2017/'            
+
     simulated_dispatch_save_folder = 'simulated/'
 
     hist_dispatch = pandas.read_csv(pjm_dispatch_save_folder + str(run_year) + '_' + nerc_region + '_hourly_demand_and_fuelmix.csv')
@@ -667,4 +675,4 @@ if __name__ == '__main__':
 
         dp = dispatch(bs, demand_data, time_array = 52) #set up the object
         dp.calcDispatchAll() #function that solves the dispatch for each time period in time_array (default for each week of the year)
-        dp.df.to_csv(simulated_dispatch_save_folder + 'dispatch_output_weekly_%s_%s_with_52.csv'%(nerc_region, str(run_year)), index=False)
+        dp.df.to_csv(simulated_dispatch_save_folder + 'dispatch_output_weekly_%s_%s_%s_with_52.csv'%(nerc_region, str(run_year), run_type), index=False)

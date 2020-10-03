@@ -11,7 +11,7 @@ import os
 # class "generatorData" turns CEMS, eGrid, FERC, and EIA data into a cleaned up dataframe for feeding into a "bidStack" object
 
 class generatorData(object):
-    def __init__(self, nerc, egrid_fname, eia923_fname,  ferc714IDs_fname='', ferc714_fname='', cems_folder='', easiur_fname='', include_easiur_damages=True, year=2015, fuel_commodity_prices_excel_dir='', hist_downtime = True, coal_min_downtime = 12, cems_validation_run=False):
+    def __init__(self, nerc, egrid_fname, eia923_fname, demand, ferc714IDs_fname='', ferc714_fname='', cems_folder='', easiur_fname='', include_easiur_damages=True, year=2015, fuel_commodity_prices_excel_dir='', hist_downtime = True, coal_min_downtime = 12, cems_validation_run=False):
         """
         Translates the CEMS, eGrid, FERC, and EIA data into a dataframe for feeding into the bidStack class
         ---
@@ -64,9 +64,9 @@ class generatorData(object):
             self.easiurDamages()
         self.addGenMinOut()
         self.addDummies()
-        self.calcDemandData()
+        self.calcDemandData(demand)
         #self.addElecPriceToDemandData()
-        self.demandTimeSeries()
+        self.demandTimeSeries(demand)
         self.calcMdtCoalEvents()
 
 
@@ -336,7 +336,6 @@ class generatorData(object):
         f_iter = list(orispl_prices[orispl_prices[1] != 0].dropna().fuel.unique())
         if 'rc' in orispl_prices.fuel.unique():
             f_iter.append('rc')
-        print(f_iter)
         for f in f_iter:
             orispl_prices_filled = orispl_prices[(orispl_prices.fuel==f) & (orispl_prices[1] != 0)].dropna().drop_duplicates(subset='orispl', keep='first').sort_values('quantity', ascending=0)
             #orispl_prices_empty = orispl_prices[(orispl_prices.fuel==f) & (orispl_prices[1].isna())]
@@ -368,14 +367,10 @@ class generatorData(object):
                 orispl_prices_empty_0 = orispl_prices_empty.copy()
                 #loop through the different purchase types and update any empties
                 for pt in ['T', 'S', 'C']:
-                    print('purchase type')
-                    print(pt)
                     orispl_prices_filled = orispl_prices_filled_0[orispl_prices_filled_0.purchase_type==pt]
                     # [AMY] added
-                    print(len(orispl_prices_filled))
                     if (len(orispl_prices_filled) == 0):
                         orispl_prices_filled = orispl_prices_filled_0
-                        print(len(orispl_prices_filled))
 
 
                     orispl_prices_empty = orispl_prices_empty_0[orispl_prices_empty_0.purchase_type==pt]
@@ -411,7 +406,6 @@ class generatorData(object):
                         loop = 0
             #otherwise
             else:
-                print(f)
                 multiplier = 1.00
                 #if refined coal, use subbit prices * 1.15
                 # Use prices from RFC
@@ -427,14 +421,11 @@ class generatorData(object):
                 if (f != 'rc'):
                     for o in scipy.concatenate((orispl_prices_empty.orispl.unique(),orispl_prices_nan.orispl.unique())):
 
-                        print(loop_len)
                         orispl_prices_filled[orispl_prices.columns.difference(['orispl_unit', 'orispl', 'fuel', 'quantity', 'purchase_type'])].iloc[loop]
                         scipy.array(orispl_prices_filled[orispl_prices.columns.difference(['orispl_unit', 'orispl', 'fuel', 'quantity', 'purchase_type'])].iloc[loop]) * multiplier
 
-                        print('2')
                         orispl_prices.loc[(orispl_prices.orispl==o) & (orispl_prices.fuel==f), orispl_prices.columns.difference(['orispl_unit', 'orispl', 'fuel', 'quantity', 'purchase_type'])]
 
-                        print('3')
                         orispl_prices.loc[(orispl_prices.orispl==o) & (orispl_prices.fuel==f), orispl_prices.columns.difference(['orispl_unit', 'orispl', 'fuel', 'quantity', 'purchase_type'])] = scipy.array(orispl_prices_filled[orispl_prices.columns.difference(['orispl_unit', 'orispl', 'fuel', 'quantity', 'purchase_type'])].iloc[loop]) * multiplier
                         #keep looping through the generators with eia923 price data until we have used all of their fuel price profiles, then start again from the beginning of the loop with the plant with the highest energy production
                         if loop < loop_len:
@@ -473,7 +464,6 @@ class generatorData(object):
             orispl_prices.loc[orispl_prices.fuel==f, orispl_prices.columns.difference(['orispl_unit', 'orispl', 'fuel'])] = scipy.tile(prices_fuel_commodity[f], (l,1))
 
         # [AMY] Handle subbit prices by grabbing the most expensive data from RFC_fuel_price
-        print('before added code')
         rc_orispl_unit = "1743_3"
         if (len(orispl_prices[orispl_prices.fuel=='rc'])!= 0):
             orispl_prices.loc[orispl_prices.fuel=='rc', orispl_prices.columns.difference(['orispl_unit', 'orispl', 'fuel'])] = rfc_fuel_df.loc[rfc_fuel_df.orispl_unit==rc_orispl_unit, orispl_prices.columns.difference(['orispl_unit', 'orispl', 'fuel'])]
@@ -584,7 +574,7 @@ class generatorData(object):
         self.df = df
 
 
-    def calcDemandData(self):
+    def calcDemandData(self, demand):
         """
         Uses CEMS data to calculate net demand (i.e. total fossil generation), total emissions, and each generator type's contribution to the generation mix
         ---
@@ -604,8 +594,9 @@ class generatorData(object):
         start_date_str = (self.df_cems.date.min()[-4:] + '-' + self.df_cems.date.min()[:5] + ' 00:00')
         date_hour_count = len(self.df_cems.date.unique())*24#+1
         hist_dispatch = pandas.DataFrame(scipy.array([pandas.Timestamp(start_date_str) + datetime.timedelta(hours=i) for i in xrange(date_hour_count)]), columns=['datetime'])
+        
         #add columns by aggregating df by date + hour
-        hist_dispatch['demand'] = df.groupby(['date','hour'], as_index=False).sum().mwh
+        #hist_dispatch['demand'] = df.groupby(['date','hour'], as_index=False).sum().mwh
         hist_dispatch['co2_tot'] = df.groupby(['date','hour'], as_index=False).sum().co2_tot # * 2000
         hist_dispatch['so2_tot'] = df.groupby(['date','hour'], as_index=False).sum().so2_tot
         hist_dispatch['nox_tot'] = df.groupby(['date','hour'], as_index=False).sum().nox_tot
@@ -616,11 +607,15 @@ class generatorData(object):
         hist_dispatch['geothermal_mix'] = df[(df.fuel_type=='geothermal') | (df.fuel=='geo')].groupby(['date','hour'], as_index=False).sum().mwh
         hist_dispatch['hydro_mix'] = df[(df.fuel_type=='hydro') | (df.fuel=='wat')].groupby(['date','hour'], as_index=False).sum().mwh
         hist_dispatch['nuclear_mix'] = df[df.fuel=='nuc'].groupby(['date','hour'], as_index=False).sum().mwh
-        #hist_dispatch['production_cost'] = df[['date', 'hour', 'production_cost']].groupby(['date','hour'], as_index=False).sum().production_cost
+        
+        # Add demand here 
+        demand.columns = ['datetime', 'demand']
+        demand.datetime = pandas.to_datetime(demand.datetime)
+        hist_dispatch = hist_dispatch.merge(demand, how='inner', on='datetime')
+
         hist_dispatch.fillna(0, inplace=True)
         #fill in last line to equal the previous line
         #hist_dispatch.loc[(len(hist_dispatch)-1)] = hist_dispatch.loc[(len(hist_dispatch)-2)]
-        hist_dispatch = hist_dispatch.fillna(0)
         self.hist_dispatch = hist_dispatch
 
 
@@ -652,7 +647,7 @@ class generatorData(object):
         self.hist_dispatch['gen_cost_marg'] = df_bas_temp.price
 
 
-    def demandTimeSeries(self):
+    def demandTimeSeries(self, demand):
         """
         Re-formats and slices self.hist_dispatch to produce a demand time series to be used by the dispatch object
         ---
@@ -661,9 +656,9 @@ class generatorData(object):
         """
         print ('Creating "demand_data" time series...')
         #demand using CEMS data
-        demand_data = self.hist_dispatch.copy(deep=True)
-        demand_data.datetime = pandas.to_datetime(demand_data.datetime)
-        self.demand_data = demand_data[['datetime', 'demand']]
+        demand.columns = ['datetime', 'demand']
+        demand.datetime = pandas.to_datetime(demand.datetime)
+        self.demand_data = demand
 
 
     def calcMdtCoalEvents(self):
@@ -705,23 +700,10 @@ class generatorData(object):
         self.mdt_coal_events = mdt_coal_events
 
 
-    def add_fossil_forecasts(self):
-        parent_dir = os.path.dirname(os.getcwd())
-        fossil_forecast = pandas.read_csv(os.path.join(parent_dir, 'data', 'generation', 'generation_data.csv'))
-        print(fossil_forecast)
-
-def add_fossil_forecasts():
-    parent_dir = os.path.dirname(os.getcwd())
-    fossil_forecast = pandas.read_csv(os.path.join(parent_dir, 'data', 'generation', 'generation_data.csv'))
-    print(fossil_forecast)
-
 if __name__ == '__main__':
-    add_fossil_forecasts()
-    run_year = 2016
-
+    run_year = 2017
+    run_type = 'forecast' # actual or forecast 
     nerc_region = 'PJM'
-    pjm_dispatch_save_folder = 'pjm/'
-    simulated_dispatch_save_folder = 'simulated/'
 
     ferc714IDs_csv = 'raw_data/Respondent IDs.csv'
     easiur_csv_path = 'raw_data/egrid_2016_plant_easiur.csv'
@@ -732,14 +714,22 @@ if __name__ == '__main__':
         egrid_data_xlsx = 'raw_data/egrid2016_data.xlsx' 
         eia923_schedule5_xlsx = 'raw_data/EIA923_Schedules_2_3_4_5_M_12_2017_Final_Revision.xlsx'
         cems_folder_path = 'raw_data/CEMS/2017/'
+        if run_type == 'actual':
+            demand_data = pandas.read_csv(os.path.join(os.path.dirname(os.getcwd()), 'data', 'generation', 'actual_fossil_gen_2017.csv'))
+            pjm_dispatch_save_folder = 'baseline/2017/'
+        else: 
+            demand_data = pandas.read_csv(os.path.join(os.path.dirname(os.getcwd()), 'neural_net_model', 'forecasted_fossil_gen.csv'))
+            pjm_dispatch_save_folder = 'forecasted/2017/'
 
     if run_year == 2016:
         egrid_data_xlsx = 'raw_data/egrid2016_data.xlsx'
         eia923_schedule5_xlsx = 'raw_data/EIA923_Schedules_2_3_4_5_M_12_2016_Final_Revision.xlsx'
         cems_folder_path = 'raw_data/CEMS/2016/'
+        demand_data = pandas.read_csv(os.path.join(os.path.dirname(os.getcwd()), 'data', 'generation', 'actual_fossil_gen_2016.csv'))
+        pjm_dispatch_save_folder = 'baseline/2016/'
 
     #run the generator data object
-    gd = generatorData(nerc_region, egrid_fname=egrid_data_xlsx, eia923_fname=eia923_schedule5_xlsx, ferc714IDs_fname=ferc714IDs_csv, ferc714_fname=ferc714_part2_schedule6_csv, cems_folder=cems_folder_path, easiur_fname=easiur_csv_path, include_easiur_damages=True, year=run_year, fuel_commodity_prices_excel_dir=fuel_commodity_prices_xlsx, hist_downtime=False, coal_min_downtime = 12, cems_validation_run=False)
+    gd = generatorData(nerc_region, egrid_fname=egrid_data_xlsx, eia923_fname=eia923_schedule5_xlsx, demand = demand_data, ferc714IDs_fname=ferc714IDs_csv, ferc714_fname=ferc714_part2_schedule6_csv, cems_folder=cems_folder_path, easiur_fname=easiur_csv_path, include_easiur_damages=True, year=run_year, fuel_commodity_prices_excel_dir=fuel_commodity_prices_xlsx, hist_downtime=False, coal_min_downtime = 12, cems_validation_run=False)
     print('generator data complete!')
 
     #create a shortened version that has only the essentials (so we can pickle)
