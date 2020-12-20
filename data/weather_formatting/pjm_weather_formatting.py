@@ -9,14 +9,15 @@ import copy
 '''
 	Get formatted hourly PJM weather data
 		(air temp, drew point temp, sky ceiling height, wind speed, sea level pressure)
-	Input: hourly 
-		Data source: 
-		Downloaded from:
+	Input:  
+		Data source: NOAA global hourly surface data
+		Downloaded from: Dolthub (https://www.dolthub.com/blog/2020-03-02-noaa-global-hourly-surface-data/)
 	Output: 
 		Training and test set of:
 			- weather with noise
 			- weather without noise
 			- weather with noise after PCA 
+		Saved to /formatted 
 '''
 
 pd.options.mode.chained_assignment = None
@@ -50,8 +51,6 @@ def main():
 			# Handle missing values 
 			by_day_df, df = drop_missing_data(df)
 			days_filled = fill_missing_days(by_day_df, df)
-
-			
 
 			# combine data from the two years 
 			weather_type_df = pd.concat([weather_type_df, days_filled])
@@ -194,6 +193,9 @@ def apply_pca(X_train, X_test, num_components):
 
 
 def add_noise(df):
+	''' Add noise by finding the average of the difference between the weather values on two consecutive days, 
+		then add normally distributed random noise that has the standard deviation equal to the previously mentioned average'''
+	
 	df = df.copy(deep=True)
 	noise_std_dev = np.abs(df.diff()).mean(axis = 0)
 

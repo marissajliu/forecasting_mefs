@@ -2,6 +2,18 @@ import os
 import pandas as pd
 import numpy as np
 
+'''
+	Get generation and load forecast data 
+	Input:  
+		Generation by fuel type and load forecast for 2016 and 2017 
+		Data source: PJM data miner 
+		Link: https://dataminer2.pjm.com
+	Output: 
+		actual_fossil_gen: actual fossile fuel gen for 2016 and 2017
+		generation_data: DF with PJM load forecast, fossil generation, renewable generation (there's a column for each 
+			hour of day) and weekly nuclear generation as well as the previous week's nuclear generation 
+'''
+
 DATA_DIR = 'raw_data'
 DATE_COL = 'date'
 HOUR_COL = 'hour'
@@ -9,7 +21,8 @@ HOUR_COL = 'hour'
 LOAD_FORECAST_FILES = [os.path.join(DATA_DIR, 'load_forecast_2017.csv'), os.path.join(DATA_DIR, 'load_forecast_2016.csv')]
 LOAD_FORECAST_COLS =['date', 'area', 'pjm_load_forecast']
 FINAL_LOAD_FORECAST_COLS = ['year', 'month', 'week', 'day', 'hour', 'pjm_load_forecast']
-AREA_ALL_PJM = 'RTO'
+# rows with this label represent load forecast for all of PJM (other labels are just a sub section of PJM)
+AREA_ALL_PJM = 'RTO' 
 
 GEN_BY_FUEL_TYPE_FILES = [os.path.join(DATA_DIR, 'gen_by_fuel_type2017.csv'), os.path.join(DATA_DIR, 'gen_by_fuel_type2016.csv')]
 NUCLEAR = 'Nuclear'
@@ -34,26 +47,25 @@ def main():
 	load_forecast_df = pd.concat(map(pd.read_csv, LOAD_FORECAST_FILES))
 	gen_by_fuel_type_df = pd.concat(map(pd.read_csv, GEN_BY_FUEL_TYPE_FILES))
 
+	# Clean load forecast and fossil fuel gen
 	formatted_load_forecast = get_load_forecasts(load_forecast_df)
-
 	fossil_gen_simple_dispatch = fossil_gen_for_simple_dispatch(gen_by_fuel_type_df)
 
+	# Save generation data by year 
 	actual_fossil_gen_2017 = fossil_gen_simple_dispatch[fossil_gen_simple_dispatch['date'].dt.year == 2017]
 	actual_fossil_gen_2017.set_index('date').sort_index().to_csv('actual_fossil_gen_2017.csv')
-
-	actual_fossil_gen_2017 = fossil_gen_simple_dispatch[fossil_gen_simple_dispatch['date'].dt.year == 2016]
-	actual_fossil_gen_2017.set_index('date').sort_index().to_csv('actual_fossil_gen_2016.csv')
+	actual_fossil_gen_2016 = fossil_gen_simple_dispatch[fossil_gen_simple_dispatch['date'].dt.year == 2016]
+	actual_fossil_gen_2016.set_index('date').sort_index().to_csv('actual_fossil_gen_2016.csv')
 
 	formatted_fossil_gen = fossil_gen_by_hour(fossil_gen_simple_dispatch)
-
 	formatted_renewables = get_wind_solar_hydro(gen_by_fuel_type_df)
 	formatted_nuclear = get_nuclear_gen(gen_by_fuel_type_df)
 
+	# Combine into one df 
 	df_merged = formatted_load_forecast
 	df_merged = df_merged.merge(formatted_fossil_gen, how='inner', left_index=True, right_index=True)
 	df_merged = df_merged.merge(formatted_renewables, how='inner', left_index=True, right_index=True).reset_index()
 	
-	#df_merged.reset_index(inplace=True)
 	df_merged = df_merged.merge(formatted_nuclear, how='inner', on=['year', 'week'])
 	df_merged.set_index(DAILY_GROUPING, inplace=True)
 	
