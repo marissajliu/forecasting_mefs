@@ -1,2 +1,12 @@
+simple_dispatch_model/baseline/*
+simple_dispatch_model/forecasted/*
+data/generation/*.csv
+data/weather_formatting/formatted/*
+neural_net_model/*.csv
+simple_dispatch_model/raw_data/*
+simple_dispatch_model/pjm/*
+simple_dispatch_model/simulated/*
+simple_dispatch_model/*.csv
+simple_dispatch_model/pjm/*.csv
 .DS_Store
 .DS_Store
